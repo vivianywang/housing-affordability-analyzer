@@ -1,30 +1,21 @@
-from flask import Flask, jsonify
+from flask import Flask
+from flask_cors import CORS
 import sqlite3
 import pandas as pd
-from pathlib import Path
+import os
 
 app = Flask(__name__)
+CORS(app)
 
-# Absolute path to the project root
-BASE_DIR = Path(__file__).resolve().parent.parent
-DB_PATH = BASE_DIR / "database" / "housing.db"
-
-@app.route("/")
-def home():
-    return "Housing Affordability API is running!"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "..", "database", "housing.db")
 
 @app.route("/cities")
 def cities():
-    print(DB_PATH)
-    print(DB_PATH.exists())
-
     conn = sqlite3.connect(DB_PATH)
-
     df = pd.read_sql_query("SELECT * FROM housing", conn)
-
     conn.close()
-
-    return jsonify(df.to_dict(orient="records"))
+    return df.to_dict(orient="records")
 
 if __name__ == "__main__":
     app.run(debug=True)

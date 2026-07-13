@@ -1,33 +1,27 @@
 import sqlite3
+import os
 
-conn = sqlite3.connect("./database/housing.db")
-cursor = conn.cursor()
+from sources import get_sample_data
+from cleaning import clean_data
 
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS housing(
-    city TEXT PRIMARY KEY,
-    region TEXT,
-    average_house_price REAL,
-    average_rent REAL,
-    median_income REAL,
-    latitude REAL,
-    longitude REAL,
-    last_updated TEXT
+df = get_sample_data()
+df = clean_data(df)
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "..", "database", "housing.db")
+
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+
+conn = sqlite3.connect(DB_PATH)
+
+df.to_sql(
+    "housing",
+    conn,
+    if_exists="replace",
+    index=False
 )
-""")
 
-cities = [
-    ("Toronto","GTA",1030000,2750,95000,43.65,-79.38,"2026-07-09"),
-    ("Ottawa","East",650000,2100,102000,45.42,-75.69,"2026-07-09"),
-    ("Thunder Bay","North",430000,1450,76000,48.38,-89.25,"2026-07-09")
-]
-
-cursor.executemany("""
-INSERT OR REPLACE INTO housing
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-""", cities)
-
-conn.commit()
 conn.close()
 
-print("Database updated!")
+print(df)
+print("Database Updated")

@@ -2,13 +2,13 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 
 function App() {
-  const [message, setMessage] = useState("");
+  const [cities, setCities] = useState([]);
 
   useEffect(() => {
     axios
-      .get("http://127.0.0.1:5000/")
+      .get("http://127.0.0.1:5000/cities")
       .then((response) => {
-        setMessage(response.data.message);
+        setCities(response.data);
       })
       .catch((error) => {
         console.error(error);
@@ -18,7 +18,14 @@ function App() {
   return (
     <div style={{ padding: "40px", fontFamily: "Arial" }}>
       <h1>🏠 Housing Affordability Analyzer</h1>
-      <p>{message}</p>
+
+      <ul>
+        {cities.map((city) => (
+          <li key={city.city}>
+            {city.city}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

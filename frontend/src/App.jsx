@@ -3,6 +3,7 @@ import axios from "axios";
 
 function App() {
   const [cities, setCities] = useState([]);
+  const [metadata, setMetadata] = useState([]);
 
   const [income, setIncome] = useState("");
   const [downPayment, setDownPayment] = useState("");
@@ -22,6 +23,15 @@ function App() {
         if (response.data.length > 0) {
           setCity(response.data[0].city);
         }
+      })
+      .catch((error) => {
+        console.error(error);
+      });
+
+    axios
+      .get("http://127.0.0.1:5000/metadata")
+      .then((response) => {
+        setMetadata(response.data);
       })
       .catch((error) => {
         console.error(error);
@@ -51,7 +61,18 @@ function App() {
     <div style={{ padding: "40px", fontFamily: "Arial" }}>
       <h1>🏠 Housing Affordability Analyzer</h1>
 
-      <div>
+      {metadata.length > 0 && (
+        <div style={{ fontSize: "14px", color: "#666", marginBottom: "20px" }}>
+          {metadata.map((m) => (
+            <span key={m.source} style={{ marginRight: "16px" }}>
+              {m.source}: {m.status === "ok" ? "updated" : m.status}{" "}
+              ({new Date(m.last_updated).toLocaleDateString()})
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div> 
         <p>Annual Income</p>
         <input
           type="number"

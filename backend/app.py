@@ -9,6 +9,8 @@ CORS(app)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "..", "database", "housing.db")
+print(f"[app.py] script location: {BASE_DIR}")
+print(f"[app.py] reading database from: {os.path.abspath(DB_PATH)}")
 
 
 def monthly_payment(principal, annual_rate, years):
@@ -32,6 +34,15 @@ def monthly_payment(principal, annual_rate, years):
 def cities():
     conn = sqlite3.connect(DB_PATH)
     df = pd.read_sql_query("SELECT * FROM housing", conn)
+    conn.close()
+
+    return df.to_dict(orient="records")
+
+
+@app.route("/metadata")
+def metadata():
+    conn = sqlite3.connect(DB_PATH)
+    df = pd.read_sql_query("SELECT * FROM metadata", conn)
     conn.close()
 
     return df.to_dict(orient="records")

@@ -8,9 +8,14 @@ app = Flask(__name__)
 CORS(app)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "..", "database", "housing.db")
-print(f"[app.py] script location: {BASE_DIR}")
-print(f"[app.py] reading database from: {os.path.abspath(DB_PATH)}")
+DB_PATH = os.path.join(BASE_DIR, "database", "housing.db")
+
+
+def read_housing() -> pd.DataFrame:
+    conn = sqlite3.connect(DB_PATH)
+    df = pd.read_sql_query("SELECT * FROM housing", conn)
+    conn.close()
+    return df
 
 
 def monthly_payment(principal, annual_rate, years):
@@ -32,11 +37,40 @@ def monthly_payment(principal, annual_rate, years):
 
 @app.route("/cities")
 def cities():
-    conn = sqlite3.connect(DB_PATH)
-    df = pd.read_sql_query("SELECT * FROM housing", conn)
-    conn.close()
+    return read_housing().to_dict(orient="records")
 
-    return df.to_dict(orient="records")
+
+@app.route("/city/<city_name>")
+def city(city_name):
+    df = read_housing()
+    row = df[df["city"].str.lower() == city_name.lower()]
+
+    if row.empty:
+        return jsonify({"error": "City not found"}), 404
+
+    return jsonify(row.iloc[0].to_dict())
+
+
+@app.route("/summary")
+def summary():
+    df = read_housing()
+
+    return jsonify({
+        "average_house_price": round(df["average_house_price"].mean(), 2),
+        "average_rent": round(df["average_rent"].mean(), 2),
+        "average_income": round(df["median_income"].mean(), 2),
+        "city_count": int(df["city"].nunique()),
+    })
+
+
+@app.route("/ranking")
+def ranking():
+    df = read_housing()
+    df = df.dropna(subset=["affordability_score"]).sort_values("affordability_score")
+
+    return df[["city", "average_house_price", "median_income", "affordability_score"]].to_dict(
+        orient="records"
+    )
 
 
 @app.route("/metadata")
@@ -45,13 +79,11 @@ def metadata():
     df = pd.read_sql_query("SELECT * FROM metadata", conn)
     conn.close()
 
-    return df.to_dict(orient="records")
+    return jsonify(dict(zip(df["key"], df["value"])))
 
 
 @app.route("/calculate", methods=["POST"])
 def calculate():
-
-    # Get user input
     data = request.get_json()
 
     income = float(data["income"])
@@ -60,12 +92,7 @@ def calculate():
     term = int(data["term"])
     city = data["city"]
 
-    # Read housing database
-    conn = sqlite3.connect(DB_PATH)
-    df = pd.read_sql_query("SELECT * FROM housing", conn)
-    conn.close()
-
-    # Find selected city
+    df = read_housing()
     city_data = df[df["city"] == city]
 
     if city_data.empty:
@@ -73,21 +100,17 @@ def calculate():
 
     house_price = float(city_data.iloc[0]["average_house_price"])
 
-    # Calculate loan
     loan = max(0, house_price - down_payment)
 
-    # Calculate monthly mortgage payment
     payment = monthly_payment(
         loan,
         interest_rate,
         term
     )
 
-    # Calculate debt-to-income ratio
     monthly_income = income / 12
     dti = payment / monthly_income
 
-    # Determine affordability rating
     if dti < 0.30:
         rating = "Excellent"
     elif dti < 0.40:
@@ -97,7 +120,6 @@ def calculate():
     else:
         rating = "Poor"
 
-    # Return results
     return jsonify({
         "city": city,
         "house_price": round(house_price, 2),

@@ -57,7 +57,6 @@ def summary():
 
     return jsonify({
         "average_house_price": round(df["average_house_price"].mean(), 2),
-        "average_rent": round(df["average_rent"].mean(), 2),
         "average_income": round(df["median_income"].mean(), 2),
         "city_count": int(df["city"].nunique()),
     })

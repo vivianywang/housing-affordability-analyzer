@@ -10,7 +10,6 @@ CREATE TABLE IF NOT EXISTS housing (
     city TEXT PRIMARY KEY,
     province TEXT,
     average_house_price REAL,
-    average_rent REAL,
     median_income REAL,
     population REAL,
     cpi REAL,

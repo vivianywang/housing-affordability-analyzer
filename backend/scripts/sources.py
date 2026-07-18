@@ -1,24 +1,3 @@
-"""
-sources.py
-
-Everything comes from Statistics Canada now. No CREA file, no CMHC file,
-no Bank of Canada API -- one source, six tables:
-
-    population           17-10-0135-01
-    median_income         98-10-0075-01
-    cpi                   18-10-0004-01
-    average_house_price   98-10-0256-01  (Census: owner-estimated dwelling value)
-    mortgage_rate         34-10-0145-01  (conventional 5-year mortgage lending rate)
-
-StatCan tables aren't all shaped the same way. Some are plain "long"
-format with one VALUE column (population, CPI, mortgage rate). Others --
-usually Census-derived tables -- are "wide" format, with a separate
-column per statistic/year combo instead of one VALUE column (income was
-like this; house price might be too). _extract_statcan_metric()
-below handles both shapes, so a table doesn't break the pipeline just
-because it's not laid out the way we expected.
-"""
-
 import io
 import re
 import zipfile
@@ -45,10 +24,6 @@ REQUEST_HEADERS = {
     )
 }
 
-
-# ---------------------------------------------------------------------------
-# Low level helper: download + unzip a full StatCan table
-# ---------------------------------------------------------------------------
 def _download_statcan_table(product_id: str, max_download_seconds: int = 45) -> pd.DataFrame:
     import time
 
@@ -103,6 +78,55 @@ def _download_statcan_table(product_id: str, max_download_seconds: int = 45) -> 
     return df
 
 
+def normalize_cma_name(name):
+    if not isinstance(name, str):
+        return None
+
+    lname = name.lower()
+
+    if "gatineau" in lname:
+        if "quebec part" in lname:
+            return None
+        if "ontario" not in lname and (
+            re.search(r",\s*que\.?\s*$", lname) or lname.rstrip().endswith("quebec")
+        ):
+            return None
+
+    name = re.sub(r"\s*\((?:CMA|CA)\)", "", name, flags=re.IGNORECASE)
+    name = re.sub(r"\s*\((?:Ontario|Quebec) part\)", "", name, flags=re.IGNORECASE)
+    name = re.sub(r",\s*Ontario part,?\s*Ontario\s*$", "", name, flags=re.IGNORECASE)
+    name = re.sub(r",\s*Ont\.?/Que\.?\s*$", "", name, flags=re.IGNORECASE)
+    name = re.sub(r",\s*Ontario/Quebec\s*$", "", name, flags=re.IGNORECASE)
+    name = re.sub(r",\s*(Ont\.|Ontario)\s*$", "", name, flags=re.IGNORECASE)
+
+    return name.strip().strip(",").strip().lower()
+
+
+def _clean_cma_join_key(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalizes df['cma_name'], drops unmatchable rows, and dedupes."""
+    df = df.copy()
+    raw = df["cma_name"].astype(str)
+    df["cma_name"] = raw.apply(normalize_cma_name)
+    df["_raw_cma_name"] = raw
+    df = df.dropna(subset=["cma_name"])
+    is_ontario_part = df["_raw_cma_name"].str.lower().str.contains("ontario part", na=False)
+    df = df.assign(_prefer=is_ontario_part).sort_values("_prefer", ascending=False)
+    df = df.drop_duplicates(subset=["cma_name"], keep="first")
+
+    combined_ottawa = (
+        df["cma_name"].eq("ottawa - gatineau")
+        & ~df["_raw_cma_name"].str.lower().str.contains("ontario part", na=False)
+    )
+    if combined_ottawa.any():
+        print(
+            "  [sources] note: this table only reports Ottawa - Gatineau as one "
+            "combined Ontario/Quebec CMA (no Ontario-only breakdown available), "
+            "so Ottawa's figure here includes the Quebec (Gatineau) side."
+        )
+
+    return df.drop(columns=["_raw_cma_name", "_prefer"])
+
+
 def _require_column(df: pd.DataFrame, expected: str, context: str) -> str:
     for col in df.columns:
         if col.strip().lower() == expected.lower():
@@ -121,11 +145,6 @@ def _find_value_column(df: pd.DataFrame):
 
 
 def _pick_latest_year_column(df: pd.DataFrame, keyword: str) -> str:
-    """
-    For wide-format (Census-style) tables: finds every column containing
-    `keyword` and returns the one for the most recent year in parentheses,
-    e.g. picks 'Median amount ($) (2020)[3]' over '...(2015)[11]'.
-    """
     candidates = []
     for col in df.columns:
         if keyword.lower() in col.lower():
@@ -144,33 +163,26 @@ def _pick_latest_year_column(df: pd.DataFrame, keyword: str) -> str:
 
 
 def _apply_dimension_filters(df: pd.DataFrame, dimension_filters):
-    """
-    dimension_filters is a list of (keyword_to_find_the_column, text_the_
-    kept_rows_must_contain) pairs, e.g. [("Statistics", "Average"),
-    ("Statistics", "Average")]. Column names are matched loosely since StatCan's
-    exact wording (and whether a dimension even exists) varies by table.
-    """
-    for keyword, must_contain in dimension_filters:
+    for entry in dimension_filters:
+        keyword, must_contain = entry[0], entry[1]
+        exact = entry[2] if len(entry) > 2 else False
         col = next((c for c in df.columns if keyword.lower() in c.lower()), None)
-        if col:
+        if col is None:
+            print(
+                f"  [sources] WARNING: no column matching dimension keyword "
+                f"{keyword!r} was found -- this filter was skipped entirely, "
+                f"so unwanted categories may leak through. Actual columns: "
+                f"{list(df.columns)}"
+            )
+            continue
+        if exact:
+            df = df[df[col].astype(str).str.strip().str.lower() == must_contain.strip().lower()]
+        else:
             df = df[df[col].astype(str).str.contains(must_contain, case=False, na=False)]
     return df
 
 
 def _select_dimension(df: pd.DataFrame, dimension_keyword: str, desired_category: str):
-    """
-    Some Census tables (like house price / 98-10-0256-01) express one
-    dimension as *wide* columns instead of a row column -- e.g. instead
-    of a 'Structural type of dwelling' row you can filter to 'Total', you
-    get separate columns like
-    'Structural type of dwelling (10):Total - Structural type of dwelling[1]'
-    and 'Structural type of dwelling (10):Single-detached house[2]'.
-
-    This handles both cases: if the dimension is wide, it returns the
-    matching wide column name (to read the value from later). If it's a
-    normal row column, it filters df down to desired_category and returns
-    None (nothing further to select).
-    """
     wide_matches = [
         c for c in df.columns
         if c.lower().startswith(dimension_keyword.lower()) and "):" in c
@@ -198,12 +210,6 @@ def _extract_statcan_metric(
     dimension_filters=None,
     context: str = "",
 ) -> pd.DataFrame:
-    """
-    Extracts a single metric, keyed by cma_name, from a StatCan table
-    that might be long-format (has a VALUE column) or wide-format
-    (Census-style, one column per statistic/year). Returns
-    DataFrame[cma_name, metric_name].
-    """
     geo_col = _require_column(df, "GEO", context or metric_name)
     value_col = _find_value_column(df)
 
@@ -223,12 +229,19 @@ def _extract_statcan_metric(
     out = df[[geo_col, metric_col]].rename(columns={geo_col: "cma_name", metric_col: metric_name})
     out[metric_name] = out[metric_name].astype(str).str.replace(",", "", regex=False)
     out[metric_name] = pd.to_numeric(out[metric_name], errors="coerce")
-    return out.dropna(subset=[metric_name])
+    out = out.dropna(subset=[metric_name])
 
+    dup_geo = sorted(out["cma_name"][out["cma_name"].duplicated(keep=False)].unique())
+    if dup_geo:
+        print(
+            f"  [sources] WARNING: {context or metric_name} has more than one row "
+            f"for the same GEO value after dimension filtering -- the filters "
+            f"aren't narrowing down to a single category, so an arbitrary row "
+            f"will be kept per city. Affected GEO values: {dup_geo}"
+        )
 
-# ---------------------------------------------------------------------------
-# Individual StatCan extracts
-# ---------------------------------------------------------------------------
+    return _clean_cma_join_key(out)
+
 def _get_population_by_cma() -> pd.DataFrame:
     """Latest total population estimate for each Ontario CMA."""
     df = _download_statcan_table(STATCAN_TABLES["population"])
@@ -237,13 +250,11 @@ def _get_population_by_cma() -> pd.DataFrame:
     latest_ref_date = df[ref_col].max()
     df = df[df[ref_col] == latest_ref_date]
 
-    # Broken down by age group and gender -- narrow to the "all ages,
-    # both genders" total, otherwise every CMA appears dozens of times.
     return _extract_statcan_metric(
         df,
         "population",
         wide_format_keyword="Population",
-        dimension_filters=[("age group", "all ages"), ("gender", "total|both")],
+        dimension_filters=[("age group", "all ages"), ("sex", "Both sexes", True)],
         context="the population table",
     )
 
@@ -256,8 +267,8 @@ def _get_income_by_cma() -> pd.DataFrame:
         "median_income",
         wide_format_keyword="Median amount ($)",
         dimension_filters=[
-            ("Economic family characteristics", "Total"),
-            ("Income sources and taxes", "Total income"),
+            ("Economic family characteristics", "Total - Persons by selected economic family characteristics", True),
+            ("Income sources and taxes", "Total income", True),
         ],
         context="the income table",
     )
@@ -287,22 +298,31 @@ def _get_cpi_ontario():
 
 
 def _get_house_price_by_cma() -> pd.DataFrame:
-    """
-    Average owner-estimated dwelling value per Ontario CMA, from the
-    2021 Census (table 98-10-0256-01). This is a homeowner's own
-    estimate of their home's value, not a resale/listing price -- the
-    closest StatCan-only proxy for CREA's average house price.
-
-    This table's real shape (confirmed against a live StatCan response):
-    'Statistics' (Average/Median) is a normal row column, but
-    'Structural type of dwelling' is expressed as wide columns instead.
-    """
     df = _download_statcan_table(STATCAN_TABLES["house_price"])
     geo_col = _require_column(df, "GEO", "the house value table")
 
+    bucket_col = next(
+        (c for c in df.columns if "value" in c.lower() and "dwelling" in c.lower() and "):" not in c),
+        None,
+    )
+    if bucket_col is None:
+        raise RuntimeError(
+            f"No 'Value (owner-estimated) of dwelling' column found. Columns: {list(df.columns)}"
+        )
+
+    before = len(df)
+    df = df[df[bucket_col].astype(str).str.contains("Average value of dwellings", case=False, na=False)]
+    if df.empty and before > 0:
+        raise RuntimeError(
+            f"Filtering '{bucket_col}' to 'Average value of dwellings' zeroed out all rows."
+        )
+
+    stats_col = next((c for c in df.columns if c.lower().startswith("statistics")), None)
+    if stats_col:
+        df = df[df[stats_col].astype(str).str.strip() == "Number of private households"]
+
     value_col = None
     for dimension, category in [
-        ("Statistics", "Average"),
         ("Age of primary household maintainer", "Total"),
         ("Presence of mortgage payments", "Total"),
         ("Number of bedrooms", "Total"),
@@ -320,13 +340,12 @@ def _get_house_price_by_cma() -> pd.DataFrame:
         if row_col and len(df) == 0 and before > 0:
             raise RuntimeError(
                 f"Filtering house value table on '{dimension}' contains '{category}' "
-                f"zeroed out all rows (had {before} before). This dimension's real "
-                f"category text doesn't match -- inspect it directly, e.g.: "
+                f"zeroed out all rows (had {before} before). Inspect it directly, e.g.: "
                 f"pd.read_csv(...)['{row_col}'].unique()"
             )
 
     if value_col is None:
-        value_col = _require_column(df, "VALUE", "the house value table")
+        raise RuntimeError("Could not find the 'Structural type of dwelling' wide column for the total.")
 
     if df.empty:
         raise RuntimeError("House value table filtered down to zero rows before a wide column could be selected.")
@@ -334,7 +353,8 @@ def _get_house_price_by_cma() -> pd.DataFrame:
     out = df[[geo_col, value_col]].rename(columns={geo_col: "cma_name", value_col: "average_house_price"})
     out["average_house_price"] = out["average_house_price"].astype(str).str.replace(",", "", regex=False)
     out["average_house_price"] = pd.to_numeric(out["average_house_price"], errors="coerce")
-    result = out.dropna(subset=["average_house_price"]).drop_duplicates(subset=["cma_name"])
+    out = out.dropna(subset=["average_house_price"])
+    result = _clean_cma_join_key(out)
 
     if result.empty:
         raise RuntimeError(
@@ -360,10 +380,6 @@ def _get_mortgage_rate():
 
     return float(latest.iloc[0][value_col]), str(latest_ref_date)
 
-
-# ---------------------------------------------------------------------------
-# Public entry point used by update_data.py
-# ---------------------------------------------------------------------------
 def get_statscan_data() -> pd.DataFrame:
     """
     Downloads every field from Statistics Canada and returns one combined
@@ -426,10 +442,6 @@ def get_statscan_data() -> pd.DataFrame:
     merged.attrs.update(release_info)
     return merged
 
-
-# ---------------------------------------------------------------------------
-# Fallback for local testing / if StatCan is unreachable
-# ---------------------------------------------------------------------------
 def get_sample_data() -> pd.DataFrame:
     data = {
         "city": ["Toronto", "Ottawa", "Thunder Bay"],

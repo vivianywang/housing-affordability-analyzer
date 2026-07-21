@@ -1,16 +1,13 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { formatCurrency, formatPercent } from "../utils/format";
+import { ASSUMED_DOWN_PAYMENT_PCT, ASSUMED_TERM_YEARS, buildCalculatePayload } from "../utils/affordability";
 
 const RATING_ORDER = ["Excellent", "Good", "Moderate", "Poor"];
 
-const ASSUMED_DOWN_PAYMENT_PCT = 0.2;
-const ASSUMED_TERM_YEARS = 25;
-
 export default function AffordabilityCard({ cityData }) {
   const [result, setResult] = useState(null);
-  const [status, setStatus] = useState("idle"); // idle | loading | error
-
+  const [status, setStatus] = useState("idle"); 
   useEffect(() => {
     if (!cityData) return;
 
@@ -18,13 +15,7 @@ export default function AffordabilityCard({ cityData }) {
     setStatus("loading");
 
     api
-      .calculate({
-        city: cityData.city,
-        income: cityData.median_income,
-        down_payment: cityData.average_house_price * ASSUMED_DOWN_PAYMENT_PCT,
-        interest_rate: cityData.mortgage_rate,
-        term: ASSUMED_TERM_YEARS,
-      })
+      .calculate(buildCalculatePayload(cityData))
       .then((data) => {
         if (!cancelled) {
           setResult(data);

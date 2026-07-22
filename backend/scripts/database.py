@@ -1,10 +1,14 @@
 import os
-import sqlite3
 import pandas as pd
+from sqlalchemy import create_engine, text
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "..", "database", "housing.db")
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL",
+    f"sqlite:///{os.path.join(BASE_DIR,'..','database','housing.db')}"
+)
 
+engine = create_engine(DATABASE_URL)
 HOUSING_SCHEMA = """
 CREATE TABLE IF NOT EXISTS housing (
     city TEXT PRIMARY KEY,
@@ -29,50 +33,57 @@ CREATE TABLE IF NOT EXISTS metadata (
 """
 
 
-def get_connection() -> sqlite3.Connection:
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    return sqlite3.connect(DB_PATH)
+def get_connection():
+    return engine
 
 
-def init_schema(conn: sqlite3.Connection) -> None:
-    cur = conn.cursor()
-    cur.execute(HOUSING_SCHEMA)
-    cur.execute(METADATA_SCHEMA)
-    conn.commit()
+def init_schema(engine):
+    with engine.begin() as conn:
+        conn.execute(text(HOUSING_SCHEMA))
+        conn.execute(text(METADATA_SCHEMA))
 
 
-def write_housing(conn: sqlite3.Connection, df: pd.DataFrame) -> None:
-    cur = conn.cursor()
-    cur.execute("DROP TABLE IF EXISTS housing")
-    cur.execute(HOUSING_SCHEMA)
-    df.to_sql("housing", conn, if_exists="append", index=False)
-    conn.commit()
-
-
-def write_metadata(conn: sqlite3.Connection, values: dict) -> None:
-    cur = conn.cursor()
-    cur.execute(METADATA_SCHEMA)
-    for key, value in values.items():
-        cur.execute(
-            """
-            INSERT INTO metadata (key, value)
-            VALUES (?, ?)
-            ON CONFLICT(key) DO UPDATE SET value=excluded.value
-            """,
-            (key, str(value)),
+def write_housing(engine, df):
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE IF EXISTS housing"))
+        conn.execute(text(HOUSING_SCHEMA))
+        df.to_sql(
+            "housing",
+            conn,
+            if_exists="append",
+            index=False
         )
-    conn.commit()
 
 
-def read_housing() -> pd.DataFrame:
-    conn = sqlite3.connect(DB_PATH)
-    df = pd.read_sql_query("SELECT * FROM housing", conn)
-    conn.close()
-    return df
+def write_metadata(engine, values):
+    with engine.begin() as conn:
+        conn.execute(text(METADATA_SCHEMA))
+        for key, value in values.items():
+            conn.execute(
+                text("""
+                INSERT INTO metadata(key,value)
+                VALUES (:key,:value)
+                ON CONFLICT(key)
+                DO UPDATE
+                SET value=EXCLUDED.value
+                """),
+                {
+                    "key": key,
+                    "value": str(value)
+                }
+            )
 
 
-def read_metadata() -> dict:
-    conn = sqlite3.connect(DB_PATH)
-    df = pd.read_sql_query("SELECT * FROM metadata", conn)
-    conn.close()
-    return dict(zip(df["key"], df["value"]))
+def read_housing():
+    return pd.read_sql(
+        "SELECT * FROM housing",
+        engine
+    )
+
+
+def read_metadata():
+    df = pd.read_sql(
+        "SELECT * FROM metadata",
+        engine
+    )
+    return dict(zip(df.key, df.value))

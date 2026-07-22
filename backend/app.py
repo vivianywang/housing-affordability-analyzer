@@ -1,21 +1,16 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import sqlite3
 import pandas as pd
 import os
+from scripts.database import (
+    read_housing,
+    read_metadata
+)
 
 app = Flask(__name__)
 CORS(app)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "database", "housing.db")
-
-
-def read_housing() -> pd.DataFrame:
-    conn = sqlite3.connect(DB_PATH)
-    df = pd.read_sql_query("SELECT * FROM housing", conn)
-    conn.close()
-    return df
 
 
 def monthly_payment(principal, annual_rate, years):
@@ -74,11 +69,7 @@ def ranking():
 
 @app.route("/metadata")
 def metadata():
-    conn = sqlite3.connect(DB_PATH)
-    df = pd.read_sql_query("SELECT * FROM metadata", conn)
-    conn.close()
-
-    return jsonify(dict(zip(df["key"], df["value"])))
+    return jsonify(read_metadata())
 
 
 @app.route("/calculate", methods=["POST"])

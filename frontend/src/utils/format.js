@@ -17,7 +17,6 @@ export function formatCurrency(value) {
     return `${value.toFixed(decimals)}%`;
   }
   
-  // "2026-07-17T22:05:01.872854+00:00" -> "July 2026"
   export function formatMonthYear(isoString) {
     if (!isoString) return "—";
     const date = new Date(isoString);

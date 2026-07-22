@@ -16,9 +16,6 @@ function ChartCard({ title, caption, children }) {
   );
 }
 
-// cities / ranking / paymentByCity are owned by App (see ensureChartsData
-// there) so switching between Dashboard and Charts doesn't re-fetch
-// everything each time -- this page just triggers the initial load.
 export default function Charts({ cities, ranking, rankingLoading, paymentByCity, onEnterPage }) {
   useEffect(() => {
     onEnterPage();

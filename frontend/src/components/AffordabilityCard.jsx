@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { formatCurrency, formatPercent } from "../utils/format";
 import { ASSUMED_DOWN_PAYMENT_PCT, ASSUMED_TERM_YEARS, buildCalculatePayload } from "../utils/affordability";
-
-const RATING_ORDER = ["Excellent", "Good", "Moderate", "Poor"];
+import RatingGauge from "./RatingGauge";
 
 export default function AffordabilityCard({ cityData }) {
   const [result, setResult] = useState(null);
-  const [status, setStatus] = useState("idle"); 
+  const [status, setStatus] = useState("idle");
+
   useEffect(() => {
     if (!cityData) return;
 
@@ -31,8 +31,6 @@ export default function AffordabilityCard({ cityData }) {
     };
   }, [cityData]);
 
-  const ratingIndex = result ? RATING_ORDER.indexOf(result.rating) : -1;
-
   return (
     <section className="affordability-card" aria-label="Affordability">
       <p className="affordability-card__eyebrow">Affordability</p>
@@ -44,20 +42,7 @@ export default function AffordabilityCard({ cityData }) {
 
       {status === "idle" && result && (
         <>
-          <div className="affordability-card__rating" data-rating={result.rating}>
-            {result.rating}
-          </div>
-
-          <div className="affordability-card__gauge" role="img" aria-label={`Affordability rating: ${result.rating}`}>
-            {RATING_ORDER.map((tier, i) => (
-              <span
-                key={tier}
-                className="affordability-card__gauge-segment"
-                data-active={i === ratingIndex}
-                data-tier={tier}
-              />
-            ))}
-          </div>
+          <RatingGauge rating={result.rating} />
 
           <div className="affordability-card__metrics">
             <div className="affordability-card__metric">

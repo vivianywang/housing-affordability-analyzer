@@ -123,7 +123,6 @@
   outline-offset: 2px;
 }
 
-/* ---------- Shared "ledger card" look, incl. the corner-tick signature ---------- */
 .stat-card,
 .affordability-card,
 .chart-card {
@@ -200,7 +199,6 @@
   color: var(--ink-soft);
 }
 
-/* ---------- Affordability card ---------- */
 .affordability-card {
   padding: 24px;
   max-width: 420px;
@@ -369,6 +367,142 @@
   justify-content: space-between;
   gap: 16px;
   margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.calculator-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 640px;
+}
+.calculator-form-card {
+  background: var(--paper-card);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 24px;
+}
+.calculator-form {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-top: 20px;
+}
+.calculator-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.calculator-form__field input,
+.calculator-form__field select {
+  font-family: var(--font-body);
+  font-size: 15px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--paper);
+  color: var(--ink);
+}
+.calculator-form__field input:focus-visible,
+.calculator-form__field select:focus-visible {
+  outline: 2px solid var(--pine);
+  outline-offset: 1px;
+}
+.calculator-form__error {
+  color: var(--ochre);
+  font-size: 12px;
+}
+.calculator-form__submit {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  padding: 11px 20px;
+  border: none;
+  border-radius: 4px;
+  background: var(--pine);
+  color: var(--paper);
+  cursor: pointer;
+}
+.calculator-form__submit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.calculator-form__submit:not(:disabled):hover {
+  filter: brightness(1.08);
+}
+@media (max-width: 560px) {
+  .calculator-form {
+    grid-template-columns: 1fr;
+  }
+}
+.calculator-result {
+  max-width: none;
+}
+
+.map-page__card {
+  padding: 20px;
+}
+.map-page__legend {
+  display: flex;
+  gap: 18px;
+  margin: 4px 0 16px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.map-page__legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.map-page__legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.map-page__container {
+  height: 520px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.map-page__container .leaflet-container {
+  font-family: var(--font-body);
+}
+.city-marker {
+  background: none;
+  border: none;
+}
+.city-marker__dot {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--paper-card);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+.map-popup {
+  font-family: var(--font-body);
+  min-width: 160px;
+}
+.map-popup__title {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15px;
+}
+.map-popup__line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 2px 0;
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--ink-soft);

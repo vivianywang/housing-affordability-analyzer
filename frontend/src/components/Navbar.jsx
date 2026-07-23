@@ -1,6 +1,13 @@
 import { NavLink } from "react-router-dom";
 import { formatMonthYear } from "../utils/format";
 
+const NAV_ITEMS = [
+  { to: "/", label: "Dashboard", end: true },
+  { to: "/charts", label: "Charts" },
+  { to: "/calculator", label: "Calculator" },
+  { to: "/map", label: "Map" },
+];
+
 export default function Navbar({ lastUpdated, cityCount }) {
   return (
     <header className="navbar">
@@ -19,17 +26,16 @@ export default function Navbar({ lastUpdated, cityCount }) {
       </p>
 
       <nav className="navbar__nav" aria-label="Pages">
-        <NavLink to="/" end className={({ isActive }) => `navbar__nav-link${isActive ? " navbar__nav-link--active" : ""}`}>
-          Dashboard
-        </NavLink>
-        <NavLink
-          to="/charts"
-          className={({ isActive }) => `navbar__nav-link${isActive ? " navbar__nav-link--active" : ""}`}
-        >
-          Charts
-        </NavLink>
-        <span className="navbar__nav-link navbar__nav-link--upcoming">Calculator</span>
-        <span className="navbar__nav-link navbar__nav-link--upcoming">Map</span>
+        {NAV_ITEMS.map(({ to, label, end }) => (
+          <NavLink
+            key={to}
+            to={to}
+            end={end}
+            className={({ isActive }) => `navbar__nav-link${isActive ? " navbar__nav-link--active" : ""}`}
+          >
+            {label}
+          </NavLink>
+        ))}
       </nav>
     </header>
   );

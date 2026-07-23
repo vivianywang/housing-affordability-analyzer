@@ -1,0 +1,25 @@
+import L from "leaflet";
+
+const TIER_COLORS = {
+  Excellent: "#2f6f5e",
+  Good: "#2f6f5e",
+  Moderate: "#b98a2e",
+  Poor: "#b5652d",
+};
+
+export function affordabilityRatingFromScore(score) {
+  if (score < 6) return "Excellent";
+  if (score < 8) return "Good";
+  if (score < 10) return "Moderate";
+  return "Poor";
+}
+
+export function makeCityIcon(rating) {
+  const color = TIER_COLORS[rating] ?? TIER_COLORS.Moderate;
+  return L.divIcon({
+    className: "city-marker",
+    html: `<span class="city-marker__dot" style="background:${color}"></span>`,
+    iconSize: [16, 16],
+    iconAnchor: [8, 8],
+  });
+}

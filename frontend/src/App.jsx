@@ -4,6 +4,8 @@ import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import Dashboard from "./pages/Dashboard";
 import Charts from "./pages/Charts";
+import Calculator from "./pages/Calculator";
+import MapPage from "./pages/Map";
 import { api, BackendUnreachableError } from "./api";
 import { buildCalculatePayload } from "./utils/affordability";
 import "./App.css";
@@ -17,13 +19,13 @@ export default function App() {
   const [cityData, setCityData] = useState(null);
   const [cityDataLoading, setCityDataLoading] = useState(false);
 
-  // Keyed by city name -- avoids re-fetching a city already viewed this
-  // session.
+
+
   const [cityCache, setCityCache] = useState({});
 
-  // Charts page data. Lazily loaded on first visit (see ensureChartsData
-  // below) and kept here rather than in Charts.jsx itself, so navigating
-  // Dashboard -> Charts -> Dashboard -> Charts only fetches once.
+
+
+
   const [ranking, setRanking] = useState(null);
   const [rankingLoading, setRankingLoading] = useState(false);
   const [paymentByCity, setPaymentByCity] = useState({});
@@ -31,9 +33,9 @@ export default function App() {
   const [initError, setInitError] = useState(null);
   const [initLoading, setInitLoading] = useState(true);
 
-  // Initial load: cities list (for the selector + charts), the cross-city
-  // summary (for the "N cities" count in the header), and metadata (for
-  // the "last updated" line).
+
+
+
   useEffect(() => {
     let cancelled = false;
 
@@ -75,9 +77,9 @@ export default function App() {
           setCityData(data);
         })
         .catch(() => {
-          // A single city lookup failing (e.g. a typo'd name) shouldn't
-          // take down the whole page -- just leave the cards showing
-          // their loading/empty state rather than throwing.
+
+
+
           setCityData(null);
         })
         .finally(() => setCityDataLoading(false));
@@ -89,8 +91,8 @@ export default function App() {
     if (selectedCity) loadCity(selectedCity);
   }, [selectedCity, loadCity]);
 
-  // Called by the Charts page on mount. No-ops on every visit after the
-  // first, since `ranking` is only ever set once here.
+
+
   const ensureChartsData = useCallback(() => {
     if (ranking || rankingLoading || cities.length === 0) return;
     setRankingLoading(true);
@@ -159,6 +161,8 @@ export default function App() {
               />
             }
           />
+          <Route path="/calculator" element={<Calculator cities={cities} />} />
+          <Route path="/map" element={<MapPage cities={cities} />} />
         </Routes>
       </main>
 
